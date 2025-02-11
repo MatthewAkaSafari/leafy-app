@@ -1,12 +1,20 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertProductSchema, insertOrderSchema } from "./schema";
+import { insertProductSchema, insertOrderSchema } from "shared/schema";
 import { generateRecommendations } from "./recommendations";
 import { createPaymentIntent } from "./payment";
 
-export function registerRoutes(app: Express): Server {
+interface AuthenticatedRequest extends Request {
+  user: {
+    id: number;
+    isFarmer: boolean;
+  } & { [key: string]: any };
+  isAuthenticated: () => this is AuthenticatedRequest;
+}
+
+export function registerRoutes(app: Express): Server | undefined {
   setupAuth(app);
 
   // Products
@@ -23,14 +31,19 @@ export function registerRoutes(app: Express): Server {
 
   // New recommendations endpoint
   app.get("/api/recommendations", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    const recommendations = await generateRecommendations(req.user.id);
-    res.json(recommendations);
+    if (!req.isAuthenticated() || !req.user) return res.sendStatus(401);
+    try {
+      const recommendations = await generateRecommendations((req as AuthenticatedRequest).user.id);
+      res.json(recommendations);
+    } catch (error) {
+      console.error('Error generating recommendations:', error);
+      res.status(500).json({ error: "Failed to generate recommendations" });
+    }
   });
 
   app.post("/api/products", async (req, res) => {
-    if (!req.isAuthenticated() || !req.user.isFarmer) {
-      return res.sendStatus(403);
+    if (!(req as AuthenticatedRequest).isAuthenticated() || !(req as AuthenticatedRequest).user?.isFarmer) {
+      return res.status(403).send("Forbidden: Only farmers can add products");
     }
 
     const parsed = insertProductSchema.safeParse(req.body);
@@ -38,15 +51,14 @@ export function registerRoutes(app: Express): Server {
 
     const product = await storage.createProduct({
       ...parsed.data,
-      farmerId: req.user.id,
+      farmerId: (req as AuthenticatedRequest).user.id,
     });
     res.status(201).json(product);
   });
 
   // Orders
   app.post("/api/orders", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (req.user.isFarmer) return res.sendStatus(403);
+    if (!req.isAuthenticated() || (req as AuthenticatedRequest).user.isFarmer) return res.sendStatus(401);
 
     const parsed = insertOrderSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
@@ -65,7 +77,7 @@ export function registerRoutes(app: Express): Server {
 
     const order = await storage.createOrder({
       ...parsed.data,
-      buyerId: req.user.id,
+      buyerId: (req as AuthenticatedRequest).user.id,
       status: "pending"
     });
     res.status(201).json(order);
@@ -73,7 +85,7 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/orders", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const orders = await storage.getUserOrders(req.user.id);
+    const orders = await storage.getUserOrders((req as AuthenticatedRequest).user.id);
     res.json(orders);
   });
 
@@ -83,9 +95,11 @@ export function registerRoutes(app: Express): Server {
     const orderId = req.body.orderId;
 
     try {
+      if (!req.user || !(req as AuthenticatedRequest).isAuthenticated()) return res.sendStatus(401);
+
       const order = await storage.getOrder(orderId);
       if (!order) return res.status(404).send("Order not found");
-      if (order.buyerId !== req.user.id) return res.sendStatus(403);
+      if (order.buyerId !== (req as AuthenticatedRequest).user.id) return res.sendStatus(403);
 
       const paymentIntent = await createPaymentIntent(order);
       res.json({ clientSecret: paymentIntent.client_secret });

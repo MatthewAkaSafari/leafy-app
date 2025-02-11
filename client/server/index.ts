@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./server/routes";
+import { registerRoutes } from "../../server/routes.ts";
 import { setupVite, serveStatic, log } from "./vite";
 import * as schema from '../../shared/schema';
 
@@ -48,14 +48,18 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  if (app.get("env") === "development") {
+  if (app.get("env") === "development" && server) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
   const PORT = 5000;
-  server.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-  });
+  if (server) {
+    server.listen(PORT, "0.0.0.0", () => {
+      log(`serving on port ${PORT}`);
+    });
+  } else {
+    log("Server is undefined. Cannot start listening.");
+  }
 })();

@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { Product } from "@shared/schema";
+import { Product } from "shared/schema";
 import { Button } from "@/components/ui/button";
 import ProductList from "@/components/product-list";
 import SearchFilters from "@/components/search-filters";

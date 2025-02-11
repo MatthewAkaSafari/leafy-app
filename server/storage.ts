@@ -1,5 +1,5 @@
-import { InsertUser, User, Product, Order } from "@shared/schema";
-import { users, products, orders } from "@shared/schema";
+import { InsertUser, User, Product, Order } from "leafy-app/shared/schema";
+import { users, products, orders } from "leafy-app/shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import session from "express-session";
