@@ -1,7 +1,7 @@
 import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertProductSchema, insertOrderSchema } from "@shared/schema";
+import { insertProductSchema, insertOrderSchema } from "shared/schema";
 import { generateRecommendations } from "./recommendations";
 import { createPaymentIntent } from "./payment";
 export function registerRoutes(app) {
@@ -19,14 +19,20 @@ export function registerRoutes(app) {
     });
     // New recommendations endpoint
     app.get("/api/recommendations", async (req, res) => {
-        if (!req.isAuthenticated())
+        if (!req.isAuthenticated() || !req.user)
             return res.sendStatus(401);
-        const recommendations = await generateRecommendations(req.user.id);
-        res.json(recommendations);
+        try {
+            const recommendations = await generateRecommendations(req.user.id);
+            res.json(recommendations);
+        }
+        catch (error) {
+            console.error('Error generating recommendations:', error);
+            res.status(500).json({ error: "Failed to generate recommendations" });
+        }
     });
     app.post("/api/products", async (req, res) => {
-        if (!req.isAuthenticated() || !req.user.isFarmer) {
-            return res.sendStatus(403);
+        if (!req.isAuthenticated() || !req.user?.isFarmer) {
+            return res.status(403).send("Forbidden: Only farmers can add products");
         }
         const parsed = insertProductSchema.safeParse(req.body);
         if (!parsed.success)
@@ -39,10 +45,8 @@ export function registerRoutes(app) {
     });
     // Orders
     app.post("/api/orders", async (req, res) => {
-        if (!req.isAuthenticated())
+        if (!req.isAuthenticated() || req.user.isFarmer)
             return res.sendStatus(401);
-        if (req.user.isFarmer)
-            return res.sendStatus(403);
         const parsed = insertOrderSchema.safeParse(req.body);
         if (!parsed.success)
             return res.status(400).json(parsed.error);
@@ -73,6 +77,8 @@ export function registerRoutes(app) {
             return res.sendStatus(401);
         const orderId = req.body.orderId;
         try {
+            if (!req.user || !req.isAuthenticated())
+                return res.sendStatus(401);
             const order = await storage.getOrder(orderId);
             if (!order)
                 return res.status(404).send("Order not found");

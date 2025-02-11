@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { Order } from 'leafy-app/shared/schema';
+import { Order } from '@shared/schema';
 import { storage } from './storage';
 
 if (!process.env.STRIPE_SECRET_KEY) {

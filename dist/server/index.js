@@ -1,6 +1,7 @@
 import express from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+// import * as schema from '../shared/schema';
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -30,20 +31,26 @@ app.use((req, res, next) => {
 });
 (async () => {
     const server = registerRoutes(app);
+    const HOST = process.env.HOST || "0.0.0.0";
     app.use((err, _req, res, _next) => {
         const status = err.status || err.statusCode || 500;
         const message = err.message || "Internal Server Error";
         res.status(status).json({ message });
-        throw err;
+        log(`Error: ${err.message}`);
     });
-    if (app.get("env") === "development") {
+    if (server && app.get("env") === "development") {
         await setupVite(app, server);
     }
     else {
         serveStatic(app);
     }
-    const PORT = 5000;
-    server.listen(PORT, "0.0.0.0", () => {
-        log(`serving on port ${PORT}`);
-    });
-})();
+    const PORT = parseInt(process.env.PORT || "5000", 10);
+    if (server) {
+        server.listen(PORT, HOST, () => {
+            log(`serving on port ${PORT}`);
+        });
+    }
+    else {
+        log("Server is undefined");
+    }
+});
